@@ -1,0 +1,41 @@
+name: Sync OpenAPI spec to psxdata-docs
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install API package
+        run: pip install -e .
+
+      - name: Export OpenAPI spec
+        run: |
+          python -c "
+          from api.main import app
+          import json
+          print(json.dumps(app.openapi(), indent=2))
+          " > openapi.json
+
+      - name: Push to psxdata-docs
+        env:
+          DOCS_REPO_TOKEN: ${{ secrets.DOCS_REPO_TOKEN }}
+        run: |
+          git clone https://x-access-token:${DOCS_REPO_TOKEN}@github.com/mtauha/psxdata-docs.git /tmp/psxdata-docs
+          cp openapi.json /tmp/psxdata-docs/openapi.json
+          cd /tmp/psxdata-docs
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add openapi.json
+          git diff --staged --quiet || git commit -m "chore: update openapi.json from psxdata-api@${{ github.sha }}"
+          git push
