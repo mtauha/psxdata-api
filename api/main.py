@@ -4,13 +4,13 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from psxdata.exceptions import InvalidSymbolError, PSXUnavailableError
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.dependencies import limiter
 from api.routers import router_registry
-from psxdata.exceptions import InvalidSymbolError, PSXUnavailableError
 
 
 @asynccontextmanager

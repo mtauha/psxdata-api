@@ -4,9 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Request
-
 import psxdata
+from fastapi import APIRouter, HTTPException, Request
+from psxdata.constants import INDEX_NAMES
+from psxdata.exceptions import PSXParseError
+
 from api.dependencies import limiter
 from api.schemas import (
     IndexConstituentResponse,
@@ -14,8 +16,6 @@ from api.schemas import (
     MetaList,
     StringListResponse,
 )
-from psxdata.constants import INDEX_NAMES
-from psxdata.exceptions import PSXParseError
 
 router = APIRouter(tags=["indices"])
 

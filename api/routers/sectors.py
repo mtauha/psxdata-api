@@ -4,9 +4,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pandas as pd
+import psxdata
 from fastapi import APIRouter, Request
 
-import psxdata
 from api.dependencies import limiter
 from api.schemas import (
     MetaList,
