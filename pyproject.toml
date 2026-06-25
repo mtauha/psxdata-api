@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 license = {file = "LICENSE.md"}
 dependencies = [
     "psxdata==0.1.0a3",
-    "fastapi>=0.100",
+    "fastapi[standard]>=0.100",
     "uvicorn[standard]>=0.23",
     "slowapi>=0.1",
     "redis>=4.5",
@@ -27,6 +27,9 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.0",
 ]
+
+[tool.fastapi]
+entrypoint = "api.main:app"
 
 [project.urls]
 Homepage = "https://github.com/mtauha/psxdata-api"
