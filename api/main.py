@@ -20,7 +20,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="psxdata", lifespan=lifespan)
+app = FastAPI(
+    title="psxdata",
+    lifespan=lifespan,
+    servers=[{"url": "https://psxdata-api.fastapicloud.dev"}],
+)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 
