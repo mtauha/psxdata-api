@@ -6,6 +6,9 @@
 
 **psxdata-api** is a FastAPI REST service that exposes Pakistan Stock Exchange data over HTTP. It wraps the [psxdata](https://pypi.org/project/psxdata/) Python library and ships its own Docker image, CI/CD pipeline, and auto-deploy config.
 
+**Base URL:** `https://psxdata-api.fastapicloud.dev`  
+**Documentation:** [https://psxdata.mintlify.app/rest-api](https://psxdata.mintlify.app/rest-api)
+
 ---
 
 ## Quick Start
