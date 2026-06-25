@@ -1,6 +1,7 @@
 # psxdata-api — REST API for Pakistan Stock Exchange (PSX) Data
 
 [![CI](https://github.com/mtauha/psxdata-api/actions/workflows/ci.yml/badge.svg)](https://github.com/mtauha/psxdata-api/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/badge/docs-mintlify-blue)](https://psxdata.mintlify.app/rest-api)
 [![Docker Hub](https://img.shields.io/docker/v/mtauha/psxdata-api?label=Docker+Hub)](https://hub.docker.com/r/mtauha/psxdata-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
