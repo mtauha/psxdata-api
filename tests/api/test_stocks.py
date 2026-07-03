@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-from psxdata.exceptions import PSXUnavailableError
+from psxdata.exceptions import PSXParseError, PSXUnavailableError
 
 from api.main import app
 
@@ -117,6 +117,22 @@ def test_stocks_psx_unavailable_returns_503(client: TestClient) -> None:
         resp = client.get("/stocks")
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "psx_unavailable"
+
+
+def test_stocks_invalid_index_returns_400(client: TestClient) -> None:
+    with patch("psxdata.tickers", side_effect=PSXParseError("Unknown index: Jargon")):
+        resp = client.get("/stocks?index=Jargon")
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "bad_request"
+
+
+def test_quote_upstream_shape_mismatch_returns_502(client: TestClient) -> None:
+    """PSX returns a row missing the required 'price' field — pydantic validation fails."""
+    df = pd.DataFrame({"symbol": ["ENGRO"]})
+    with patch("psxdata.quote", return_value=df):
+        resp = client.get("/stocks/ENGRO/quote")
+    assert resp.status_code == 502
+    assert resp.json()["error"]["code"] == "upstream_data_error"
 
 
 def test_stocks_cors_header_present(client: TestClient) -> None:

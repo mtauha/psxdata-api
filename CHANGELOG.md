@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- `GET /stocks?index=<invalid>` no longer returns a bare `500 Internal Server Error`. `PSXParseError` (raised when PSX rejects an unknown index name) is now caught and returns `400 bad_request` with a descriptive message (fixes [#2](https://github.com/mtauha/psxdata-api/issues/2)).
+- Pydantic validation failures when building response models from upstream PSX data (e.g. a missing/renamed field) now return `502 upstream_data_error` instead of an opaque `500`, and are logged server-side via `logger.exception` for diagnosis.
+- The generic unhandled-exception handler now logs the exception instead of silently discarding it.
+
+---
+
 ## [0.1.0] — 2026-06-25
 
 ### Added
