@@ -88,8 +88,12 @@ async def psx_parse_error_handler(request: Request, exc: PSXParseError) -> JSONR
 
 
 @app.exception_handler(ValidationError)
-async def pydantic_validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
-    logger.exception("Response data failed pydantic validation on %s", request.url.path, exc_info=exc)
+async def pydantic_validation_error_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
+    logger.exception(
+        "Response data failed pydantic validation on %s", request.url.path, exc_info=exc
+    )
     return JSONResponse(
         status_code=502,
         content={
