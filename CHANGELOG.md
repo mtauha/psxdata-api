@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- `GET /sectors/{name}/stocks` no longer returns a bare `500 Internal Server Error`. It called `psxdata.symbols()`, which existed in the SDK's git source but had never been published to PyPI. Bumped the `psxdata` pin to `0.1.0a4`, which ships it (fixes [#1](https://github.com/mtauha/psxdata-api/issues/1)).
+
+### Changed
+
+- `psxdata` dependency pin bumped from `0.1.0a3` to `0.1.0a4`.
+
+---
+
 ## [0.1.1] — 2026-07-03
 
 ### Fixed

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE.md"}
 dependencies = [
-    "psxdata==0.1.0a3",
+    "psxdata==0.1.0a4",
     "fastapi[standard]>=0.100",
     "uvicorn[standard]>=0.23",
     "slowapi>=0.1",
