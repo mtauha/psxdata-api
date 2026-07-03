@@ -1,16 +1,20 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from psxdata.exceptions import InvalidSymbolError, PSXUnavailableError
+from psxdata.exceptions import InvalidSymbolError, PSXParseError, PSXUnavailableError
+from pydantic import ValidationError
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.dependencies import limiter
 from api.routers import router_registry
+
+logger = logging.getLogger("api")
 
 
 @asynccontextmanager
@@ -43,6 +47,7 @@ _ERROR_CODES: dict[int, str] = {
     404: "not_found",
     422: "bad_request",
     429: "rate_limited",
+    502: "upstream_data_error",
     503: "psx_unavailable",
     500: "internal_error",
 }
@@ -74,6 +79,29 @@ async def invalid_symbol_handler(request: Request, exc: InvalidSymbolError) -> J
     )
 
 
+@app.exception_handler(PSXParseError)
+async def psx_parse_error_handler(request: Request, exc: PSXParseError) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={"error": {"status": 400, "code": _ERROR_CODES[400], "message": str(exc)}},
+    )
+
+
+@app.exception_handler(ValidationError)
+async def pydantic_validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
+    logger.exception("Response data failed pydantic validation on %s", request.url.path, exc_info=exc)
+    return JSONResponse(
+        status_code=502,
+        content={
+            "error": {
+                "status": 502,
+                "code": _ERROR_CODES[502],
+                "message": "Upstream data did not match the expected format",
+            }
+        },
+    )
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     code = _ERROR_CODES.get(exc.status_code, "internal_error")
@@ -101,6 +129,7 @@ async def validation_exception_handler(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception on %s", request.url.path, exc_info=exc)
     return JSONResponse(
         status_code=500,
         content={"error": {"status": 500, "code": "internal_error", "message": "Internal Server Error"}},  # noqa: E501
