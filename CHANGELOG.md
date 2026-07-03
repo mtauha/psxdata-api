@@ -7,6 +7,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.1.3] — 2026-07-03
+
+### Fixed
+
+- `GET /stocks/{symbol}/quote` no longer fails with a `502 upstream_data_error` for every symbol. Root cause was in the `psxdata` SDK: the screener scraper never coerced `change_pct` to a float, leaving it as a percent-suffixed string (e.g. `"1.24%"`) that failed `QuoteData` validation. Bumped the `psxdata` pin to `0.1.0a5`, which fixes the coercion at the source.
+
+---
+
 ## [0.1.2] — 2026-07-03
 
 ### Fixed
@@ -54,6 +62,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+[0.1.3]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.3
 [0.1.2]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.2
 [0.1.1]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.1
 [0.1.0]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.0
