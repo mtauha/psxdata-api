@@ -103,6 +103,7 @@ Every response wraps its payload in a consistent envelope.
 | 400, 422 | `bad_request` | Invalid input or query parameters |
 | 404 | `not_found` | Symbol or index does not exist |
 | 429 | `rate_limited` | Exceeded 60 requests/minute per IP |
+| 502 | `upstream_data_error` | Upstream PSX data failed validation |
 | 503 | `psx_unavailable` | PSX website unreachable |
 | 500 | `internal_error` | Unexpected server error |
 
@@ -152,12 +153,6 @@ mypy api/
 ```
 
 Requires Python 3.11+.
-
----
-
-## Known Issues
-
-- `GET /sectors/{name}/stocks` returns an empty list — `psxdata.symbols()` is not yet part of the public `psxdata` API (tracked in [#1](https://github.com/mtauha/psxdata-api/issues/1)).
 
 ---
 
