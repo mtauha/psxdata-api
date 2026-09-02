@@ -23,6 +23,7 @@ docker run -p 8000:8000 mtauha/psxdata-api
 curl http://localhost:8000/health
 curl http://localhost:8000/stocks
 curl "http://localhost:8000/stocks/ENGRO/historical?start=2024-01-01&end=2024-12-31"
+curl http://localhost:8000/screener
 ```
 
 Interactive docs available at `http://localhost:8000/docs` (Swagger UI) and `/redoc`.
@@ -59,6 +60,14 @@ Interactive docs available at `http://localhost:8000/docs` (Swagger UI) and `/re
 | ------ | ---- | ----------- |
 | `GET` | `/sectors` | All 37 sector summaries |
 | `GET` | `/sectors/{name}/stocks` | Tickers in a named sector |
+
+### Screener
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/screener` | Full, unfiltered PSX screener table (~729 symbols, all columns) |
+
+---
 
 ### Market Instruments
 

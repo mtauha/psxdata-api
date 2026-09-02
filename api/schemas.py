@@ -144,6 +144,28 @@ class SectorsResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Screener
+# ---------------------------------------------------------------------------
+
+class ScreenerRow(BaseModel):
+    symbol: str
+    sector: float | None = None
+    listed_in: str | None = None
+    market_cap: float | None = None
+    price: float | None = None
+    pe_ratio: float | None = None
+    dividend_yield: float | None = None
+    free_float: float | None = None
+    volume_avg_30d: float | None = None
+    change_1y_pct: float | None = None
+
+
+class ScreenerResponse(BaseModel):
+    data: list[ScreenerRow]
+    meta: MetaList
+
+
+# ---------------------------------------------------------------------------
 # Market
 # ---------------------------------------------------------------------------
 

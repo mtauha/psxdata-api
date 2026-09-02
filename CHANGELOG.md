@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.2.0] — 2026-09-02
+
+### Added
+
+- `GET /screener` endpoint — returns the full, unfiltered PSX screener table (~729 symbols, all columns), following the same shape as `GET /sectors`. Backed by the new `psxdata.screener()` SDK function.
+
+### Changed
+
+- Bumped the `psxdata` pin to `1.1.0`, which ships `screener()`.
+
+---
+
 ## [0.1.3] — 2026-07-03
 
 ### Fixed
@@ -62,6 +74,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+[0.2.0]: https://github.com/mtauha/psxdata-api/releases/tag/v0.2.0
 [0.1.3]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.3
 [0.1.2]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.2
 [0.1.1]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.1
