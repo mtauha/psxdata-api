@@ -12,5 +12,4 @@ __pycache__/
 .ruff_cache/
 .env*
 .venv/
-pyproject.toml
 *.md
