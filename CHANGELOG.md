@@ -7,6 +7,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.2.1] — 2026-09-26
+
+### Fixed
+
+- Every data endpoint (`/stocks`, `/indices`, `/sectors`, `/sectors/{name}/stocks`, `/screener`) was returning `502 upstream_data_error` since 2026-09-24, because PSX started requiring an `X-Req-Id` request token on its data endpoints and the pinned `psxdata` version had no way to send one. Bumped the `psxdata` pin to `1.1.1`, which fetches and sends the token automatically ([mtauha/psxdata#161](https://github.com/mtauha/psxdata/issues/161)). No API changes on our side.
+
+---
+
 ## [0.2.0] — 2026-09-02
 
 ### Added
@@ -74,6 +82,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+[0.2.1]: https://github.com/mtauha/psxdata-api/releases/tag/v0.2.1
 [0.2.0]: https://github.com/mtauha/psxdata-api/releases/tag/v0.2.0
 [0.1.3]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.3
 [0.1.2]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.2
