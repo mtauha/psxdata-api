@@ -7,6 +7,7 @@ from psxdata.exceptions import InvalidSymbolError, PSXRateLimitError, PSXUnavail
 from api.dependencies import limiter
 from api.main import app
 
+
 # Register sentinel routes at module level to avoid mutating `app` inside test bodies.
 # These routes exist only to trigger specific exception types for testing.
 @app.get("/__test_500")
