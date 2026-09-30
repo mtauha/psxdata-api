@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
-import psxdata
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from api.dependencies import limiter
+from api.proxy import PsxSource, psx_source
 from api.schemas import MarketTablesResponse, MetaSingle
 
 router = APIRouter(tags=["market"])
@@ -36,8 +36,8 @@ def _serialize_tables(tables: dict[str, pd.DataFrame]) -> dict[str, list[dict[st
 
 @router.get("/debt-market", response_model=MarketTablesResponse)
 @limiter.limit("60/minute")
-def get_debt_market(request: Request) -> MarketTablesResponse:
-    tables = psxdata.debt_market()
+def get_debt_market(request: Request, psx: PsxSource = Depends(psx_source)) -> MarketTablesResponse:
+    tables = psx.fetch("debt_market")
     return MarketTablesResponse(
         data=_serialize_tables(tables),
         meta=MetaSingle(timestamp=_now_iso(), cached=False),
@@ -46,8 +46,10 @@ def get_debt_market(request: Request) -> MarketTablesResponse:
 
 @router.get("/eligible-scrips", response_model=MarketTablesResponse)
 @limiter.limit("60/minute")
-def get_eligible_scrips(request: Request) -> MarketTablesResponse:
-    tables = psxdata.eligible_scrips()
+def get_eligible_scrips(
+    request: Request, psx: PsxSource = Depends(psx_source)
+) -> MarketTablesResponse:
+    tables = psx.fetch("eligible_scrips")
     return MarketTablesResponse(
         data=_serialize_tables(tables),
         meta=MetaSingle(timestamp=_now_iso(), cached=False),

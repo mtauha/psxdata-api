@@ -20,6 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.cache.factory import build_historical_service
 from api.cache.historical import COOLDOWN_MESSAGE, PSX_COOLDOWN_SECONDS
 from api.dependencies import limiter
+from api.proxy import ProxyPassthrough, ProxyUnreachableError
 from api.routers import router_registry
 
 logger = logging.getLogger("api")
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
     """Build the /historical cache on startup and close its backend on shutdown."""
     service = build_historical_service(os.environ)
     app.state.historical_service = service
+    app.state.proxy_passthrough = ProxyPassthrough.from_env(os.environ)
     try:
         yield
     finally:
@@ -89,6 +91,14 @@ async def psx_rate_limit_handler(request: Request, exc: PSXRateLimitError) -> JS
         status_code=503,
         headers={"Retry-After": str(PSX_COOLDOWN_SECONDS)},
         content={"error": {"status": 503, "code": _ERROR_CODES[503], "message": COOLDOWN_MESSAGE}},
+    )
+
+
+@app.exception_handler(ProxyUnreachableError)
+async def proxy_unreachable_handler(request: Request, exc: ProxyUnreachableError) -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={"error": {"status": 502, "code": "proxy_unreachable", "message": str(exc)}},
     )
 
 

@@ -115,6 +115,7 @@ Every response wraps its payload in a consistent envelope.
 | 404 | `not_found` | Symbol or index does not exist |
 | 429 | `rate_limited` | Exceeded 60 requests/minute per IP |
 | 502 | `upstream_data_error` | Upstream PSX data failed validation |
+| 502 | `proxy_unreachable` | The `X-PSX-Proxy` you sent did not accept a connection |
 | 503 | `psx_unavailable` | PSX website unreachable, or PSX is rate-limiting the API (sent with a `Retry-After` header) |
 | 500 | `internal_error` | Unexpected server error |
 
@@ -146,6 +147,26 @@ Every `/historical` response says where it came from:
 
 ---
 
+## Proxy Passthrough
+
+Send an `X-PSX-Proxy` header to have the API fetch that request's PSX data through your own proxy, using psxdata's [proxy support](https://psxdata.mintlify.app/sdk/guides/proxy). The request token is fetched through the same proxy.
+
+```bash
+curl -H "X-PSX-Proxy: http://user:pass@proxy.example.com:8080"   https://psxdata-api.fastapicloud.dev/stocks/ENGRO/quote
+```
+
+The proxy is only used when PSX has to be contacted: if the data is already in the API's cache, it's served straight from there and your proxy is never touched. When PSX must be fetched, the server connects to an address you choose, so the proxy is checked first:
+
+- **Only when enabled.** The server operator has to turn it on (`PSX_PROXY_PASSTHROUGH`). Otherwise the header is rejected with `400`.
+- **Schemes:** `http://`, `socks5://` or `socks5h://`, with an explicit port (80, 443, or 1024–65535) and optional `user:pass@`. `https://` proxies are not accepted.
+- **Public addresses only.** The proxy host must resolve only to public internet addresses. Loopback, private, link-local (including cloud metadata), CGNAT and multicast addresses are rejected. The connection is pinned to the checked IP, so the name cannot be re-pointed afterwards.
+- **Quick reachability check.** On a cache miss, a proxy that doesn't accept a TCP connection within 5 seconds returns `502 proxy_unreachable`.
+- **Same cache as everyone else.** The proxy only changes the route to PSX, not the data. Proxied requests are served from the cache when it's fresh, and what they fetch is cached for all callers. PSX is HTTPS-only and certificates are verified, so a proxy tunnels encrypted traffic and cannot alter it.
+- **Stricter limits on PSX fetches.** Requests that go through your proxy to PSX are limited to 10 per minute per IP, with at most 4 in progress server-wide (`429` beyond that). Requests answered from the cache don't count toward this, only toward the normal limit.
+- **Credentials are never logged or echoed back.** Send the proxy only in the header, never in the URL.
+
+---
+
 ## Configuration
 
 All settings are optional environment variables.
@@ -154,6 +175,7 @@ All settings are optional environment variables.
 | -------- | ------- | ----------- |
 | `REDIS_URL` | unset | Redis-compatible server for the `/historical` cache, e.g. an [Aiven for Valkey](https://aiven.io/valkey) service URI (`rediss://default:<password>@<host>:<port>`). Keeps the cache across restarts and instances. When unset, or when the server is unreachable, the API falls back to an in-memory cache and keeps working. |
 | `HISTORICAL_CACHE_MARKET_TTL` | `1800` | How long, in seconds, `/historical` data stays fresh during PSX trading hours. |
+| `PSX_PROXY_PASSTHROUGH` | off | Set to `true` to honour the per-request `X-PSX-Proxy` header (see [Proxy Passthrough](#proxy-passthrough)). |
 
 ```bash
 docker run -p 8000:8000 -e REDIS_URL="rediss://default:<password>@<host>:<port>" mtauha/psxdata-api

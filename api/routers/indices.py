@@ -4,12 +4,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pandas as pd
-import psxdata
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from psxdata.constants import INDEX_NAMES
 from psxdata.exceptions import PSXParseError
 
 from api.dependencies import limiter
+from api.proxy import PsxSource, psx_source
 from api.schemas import (
     IndexConstituentResponse,
     IndexConstituentRow,
@@ -36,9 +36,11 @@ def list_indices(request: Request) -> StringListResponse:
 
 @router.get("/indices/{name}", response_model=IndexConstituentResponse)
 @limiter.limit("60/minute")
-def get_index(request: Request, name: str) -> IndexConstituentResponse:
+def get_index(
+    request: Request, name: str, psx: PsxSource = Depends(psx_source)
+) -> IndexConstituentResponse:
     try:
-        df = psxdata.indices(name.upper())
+        df = psx.fetch("indices", name.upper())
     except PSXParseError:
         raise HTTPException(status_code=404, detail=f"Index {name.upper()} not found")
 

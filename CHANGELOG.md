@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.4.0] — 2026-09-30
+
+### Added
+
+- Per-request proxy passthrough. An optional `X-PSX-Proxy` header (`http://`, `socks5://` or `socks5h://`, with an explicit port and optional `user:pass@`) makes the API fetch that request's PSX data, including the request token, through the caller's proxy, using psxdata 1.2.0's proxy support. Off by default. Enable it with `PSX_PROXY_PASSTHROUGH=true`.
+- Hardening against server-side request forgery (SSRF) for the proxy:
+  - the host must resolve only to public addresses, and the connection is pinned to the checked IP (defeats DNS rebinding);
+  - `https://` proxies and ports below 1024 (other than 80 and 443) are refused;
+  - a 5-second TCP check runs first (`502 proxy_unreachable` on failure);
+  - limits of 10 proxied PSX fetches per minute per IP and 4 concurrent server-wide;
+  - a bounded pool of proxied clients.
+- The proxy is only used on a cache miss: cached data is served without resolving or contacting the caller's proxy, and cache hits don't count toward the proxy rate limit. A malformed header, or one sent while the feature is off, is still rejected on every request.
+- Proxied requests use the same caches as all other requests. The proxy only changes the route to PSX: cached data is served without contacting PSX, and data fetched through a proxy is cached for everyone. PSX is HTTPS-only with certificate verification, so a proxy cannot alter what it relays.
+- Proxy credentials are never logged or echoed in error messages.
+
+### Changed
+
+- Requires `psxdata[socks]==1.2.0` (was `psxdata==1.1.1`).
+
+---
+
 ## [0.3.0] — 2026-09-30
 
 ### Added

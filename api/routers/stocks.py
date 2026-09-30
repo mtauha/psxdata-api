@@ -2,15 +2,16 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import date, datetime, timezone
 from typing import Any
 
 import pandas as pd
-import psxdata
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from api.cache.historical import CacheStatus
 from api.dependencies import get_cache, limiter
+from api.proxy import PsxSource, psx_source
 from api.schemas import (
     ErrorEnvelope,
     FundamentalsResponse,
@@ -83,14 +84,19 @@ def _parse_date(name: str, value: str | None) -> date | None:
     raise HTTPException(status_code=422, detail=f"{name} must be an ISO date (YYYY-MM-DD)")
 
 
-def _fetch_full_history(symbol: str) -> list[dict]:
-    return _df_to_records(psxdata.stocks(symbol, cache=False))
+def _full_history_fetcher(psx: PsxSource) -> Callable[[str], list[dict]]:
+    """Fetch a symbol's full history from PSX, through the caller's proxy if one was given."""
+    def fetch(symbol: str) -> list[dict]:
+        return _df_to_records(psx.fetch("stocks", symbol, cache=False))
+    return fetch
 
 
 @router.get("/stocks", response_model=StringListResponse)
 @limiter.limit("60/minute")
-def list_stocks(request: Request, index: str | None = None) -> StringListResponse:
-    tickers = psxdata.tickers(index=index)
+def list_stocks(
+    request: Request, index: str | None = None, psx: PsxSource = Depends(psx_source)
+) -> StringListResponse:
+    tickers = psx.fetch("tickers", index=index)
     return StringListResponse(
         data=tickers,
         meta=MetaList(timestamp=_now_iso(), cached=False, count=len(tickers)),
@@ -109,13 +115,14 @@ def get_historical(
     symbol: str,
     start: str | None = None,
     end: str | None = None,
+    psx: PsxSource = Depends(psx_source),
 ) -> HistoricalResponse:
     start_date = _parse_date("start", start)
     end_date = _parse_date("end", end)
     if start_date and end_date and start_date > end_date:
         raise HTTPException(status_code=422, detail="start must not be after end")
 
-    result = get_cache(request).get(symbol.upper(), _fetch_full_history)
+    result = get_cache(request).get(symbol.upper(), _full_history_fetcher(psx))
 
     lo = start_date.isoformat() if start_date else None
     hi = end_date.isoformat() if end_date else None
@@ -138,8 +145,8 @@ def get_historical(
 
 @router.get("/stocks/{symbol}/quote", response_model=QuoteResponse)
 @limiter.limit("60/minute")
-def get_quote(request: Request, symbol: str) -> QuoteResponse:
-    df = psxdata.quote(symbol.upper())
+def get_quote(request: Request, symbol: str, psx: PsxSource = Depends(psx_source)) -> QuoteResponse:
+    df = psx.fetch("quote", symbol.upper())
     if df.empty:
         raise HTTPException(status_code=404, detail=f"{symbol.upper()} not found")
     row = _df_to_records(df)[0]
@@ -152,8 +159,10 @@ def get_quote(request: Request, symbol: str) -> QuoteResponse:
 
 @router.get("/stocks/{symbol}/fundamentals", response_model=FundamentalsResponse)
 @limiter.limit("60/minute")
-def get_fundamentals(request: Request, symbol: str) -> FundamentalsResponse:
-    df = psxdata.fundamentals(symbol=symbol.upper())
+def get_fundamentals(
+    request: Request, symbol: str, psx: PsxSource = Depends(psx_source)
+) -> FundamentalsResponse:
+    df = psx.fetch("fundamentals", symbol=symbol.upper())
     rows: list[FundamentalsRow] = []
     if not df.empty:
         rows = [FundamentalsRow.model_validate(r) for r in _df_to_records(df)]
