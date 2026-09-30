@@ -2,7 +2,7 @@
 import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
-from psxdata.exceptions import InvalidSymbolError, PSXUnavailableError
+from psxdata.exceptions import InvalidSymbolError, PSXRateLimitError, PSXUnavailableError
 
 from api.dependencies import limiter
 from api.main import app
@@ -17,6 +17,11 @@ def _boom():
 @app.get("/__test_503")
 def _psx_down():
     raise PSXUnavailableError("PSX server unreachable")
+
+
+@app.get("/__test_503_rate_limited")
+def _psx_rate_limited():
+    raise PSXRateLimitError("PSX rate limit exceeded (429) on https://dps.psx.com.pk/historical")
 
 
 @app.get("/__test_404_symbol")
@@ -66,6 +71,16 @@ def test_psx_unavailable_maps_to_503(client: TestClient) -> None:
     assert body["error"]["status"] == 503
     assert body["error"]["code"] == "psx_unavailable"
     assert "PSX server unreachable" in body["error"]["message"]
+
+
+def test_psx_rate_limit_maps_to_503_with_retry_after(client: TestClient) -> None:
+    resp = client.get("/__test_503_rate_limited")
+    assert resp.status_code == 503
+    assert resp.headers["Retry-After"] == "60"
+    body = resp.json()
+    assert body["error"]["status"] == 503
+    assert body["error"]["code"] == "psx_unavailable"
+    assert body["error"]["message"] == "PSX is rate-limiting requests; retry later"
 
 
 def test_invalid_symbol_maps_to_404(client: TestClient) -> None:

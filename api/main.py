@@ -5,12 +5,18 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from psxdata.exceptions import InvalidSymbolError, PSXParseError, PSXUnavailableError
+from psxdata.exceptions import (
+    InvalidSymbolError,
+    PSXParseError,
+    PSXRateLimitError,
+    PSXUnavailableError,
+)
 from pydantic import ValidationError
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from api.cache.historical import COOLDOWN_MESSAGE, PSX_COOLDOWN_SECONDS
 from api.dependencies import limiter
 from api.routers import router_registry
 
@@ -68,6 +74,15 @@ async def psx_unavailable_handler(request: Request, exc: PSXUnavailableError) ->
     return JSONResponse(
         status_code=503,
         content={"error": {"status": 503, "code": _ERROR_CODES[503], "message": str(exc)}},
+    )
+
+
+@app.exception_handler(PSXRateLimitError)
+async def psx_rate_limit_handler(request: Request, exc: PSXRateLimitError) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": str(PSX_COOLDOWN_SECONDS)},
+        content={"error": {"status": 503, "code": _ERROR_CODES[503], "message": COOLDOWN_MESSAGE}},
     )
 
 
