@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -16,6 +17,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from api.cache.factory import build_historical_service
 from api.cache.historical import COOLDOWN_MESSAGE, PSX_COOLDOWN_SECONDS
 from api.dependencies import limiter
 from api.routers import router_registry
@@ -25,9 +27,13 @@ logger = logging.getLogger("api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifespan — startup and shutdown events."""
-    # TODO: initialise cache / Redis on startup, close on shutdown.
-    yield
+    """Build the /historical cache on startup and close its backend on shutdown."""
+    service = build_historical_service(os.environ)
+    app.state.historical_service = service
+    try:
+        yield
+    finally:
+        service.close()
 
 
 app = FastAPI(

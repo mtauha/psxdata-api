@@ -63,10 +63,10 @@ def test_historical_empty_returns_200_not_404(client: TestClient) -> None:
     assert resp.json()["data"] == []
 
 
-def test_historical_passes_date_params(client: TestClient) -> None:
+def test_historical_fetches_full_history_without_sdk_cache(client: TestClient) -> None:
     with patch("psxdata.stocks", return_value=pd.DataFrame()) as mock_stocks:
         client.get("/stocks/ENGRO/historical?start=2024-01-01&end=2024-12-31")
-    mock_stocks.assert_called_once_with("ENGRO", start="2024-01-01", end="2024-12-31")
+    mock_stocks.assert_called_once_with("ENGRO", cache=False)
 
 
 def test_quote_returns_200(client: TestClient) -> None:
