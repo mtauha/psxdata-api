@@ -4,10 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pandas as pd
-import psxdata
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from api.dependencies import limiter
+from api.proxy import PsxSource, psx_source
 from api.schemas import MetaList, ScreenerResponse, ScreenerRow
 
 router = APIRouter(tags=["screener"])
@@ -19,8 +19,8 @@ def _now_iso() -> str:
 
 @router.get("/screener", response_model=ScreenerResponse)
 @limiter.limit("60/minute")
-def list_screener(request: Request) -> ScreenerResponse:
-    df = psxdata.screener()
+def list_screener(request: Request, psx: PsxSource = Depends(psx_source)) -> ScreenerResponse:
+    df = psx.fetch("screener")
     rows: list[ScreenerRow] = []
     if not df.empty:
         df = df.where(pd.notna(df), other=None)

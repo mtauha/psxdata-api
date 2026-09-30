@@ -4,10 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pandas as pd
-import psxdata
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from api.dependencies import limiter
+from api.proxy import PsxSource, psx_source
 from api.schemas import (
     MetaList,
     SectorRow,
@@ -24,8 +24,8 @@ def _now_iso() -> str:
 
 @router.get("/sectors", response_model=SectorsResponse)
 @limiter.limit("60/minute")
-def list_sectors(request: Request) -> SectorsResponse:
-    df = psxdata.sectors()
+def list_sectors(request: Request, psx: PsxSource = Depends(psx_source)) -> SectorsResponse:
+    df = psx.fetch("sectors")
     rows: list[SectorRow] = []
     if not df.empty:
         df = df.where(pd.notna(df), other=None)
@@ -41,8 +41,10 @@ def list_sectors(request: Request) -> SectorsResponse:
 
 @router.get("/sectors/{name}/stocks", response_model=StringListResponse)
 @limiter.limit("60/minute")
-def get_sector_stocks(request: Request, name: str) -> StringListResponse:
-    df = psxdata.symbols()
+def get_sector_stocks(
+    request: Request, name: str, psx: PsxSource = Depends(psx_source)
+) -> StringListResponse:
+    df = psx.fetch("symbols")
     tickers: list[str] = []
     if not df.empty and "sector_name" in df.columns and "symbol" in df.columns:
         matched = df[df["sector_name"].str.upper() == name.upper()]

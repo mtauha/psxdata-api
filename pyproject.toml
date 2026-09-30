@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psxdata-api"
-version = "0.3.0"
+version = "0.4.0"
 description = "FastAPI REST service for Pakistan Stock Exchange (PSX) data"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE.md"}
 dependencies = [
-    "psxdata==1.1.1",
+    "psxdata[socks]==1.2.0",
     "fastapi[standard]>=0.100",
     "uvicorn[standard]>=0.23",
     "slowapi>=0.1",
