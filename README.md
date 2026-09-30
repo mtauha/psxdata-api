@@ -140,7 +140,7 @@ Every `/historical` response says where it came from:
 
 | Header | Values |
 | ------ | ------ |
-| `X-Cache` | `HIT` — fresh cached copy · `MISS` — fetched from PSX just now · `STALE` — PSX refused or was unreachable, so the last cached copy was served · `BYPASS` — fetched through your `X-PSX-Proxy`, cache not used |
+| `X-Cache` | `HIT` — fresh cached copy · `MISS` — fetched from PSX just now · `STALE` — PSX refused or was unreachable, so the last cached copy was served |
 | `Age` | Seconds since the data was fetched from PSX (on `HIT` and `STALE`) |
 
 `meta.cached` is `true` for `HIT` and `STALE`. If PSX is rate-limiting and no cached copy exists, the API returns `503 psx_unavailable` with `Retry-After: 60`.
@@ -161,7 +161,7 @@ The server connects to an address you choose, so the proxy is checked before use
 - **Schemes:** `http://`, `socks5://` or `socks5h://`, with an explicit port (80, 443, or 1024–65535) and optional `user:pass@`. `https://` proxies are not accepted.
 - **Public addresses only.** The proxy host must resolve only to public internet addresses. Loopback, private, link-local (including cloud metadata), CGNAT and multicast addresses are rejected. The connection is pinned to the checked IP, so the name cannot be re-pointed afterwards.
 - **Quick reachability check.** A proxy that doesn't accept a TCP connection within 5 seconds returns `502 proxy_unreachable`.
-- **No cache.** Proxied requests never read or write the API's cache. `/historical` answers with `X-Cache: BYPASS`.
+- **Same cache as everyone else.** The proxy only changes the route to PSX, not the data. Proxied requests are served from the cache when it's fresh, and what they fetch is cached for all callers. PSX is HTTPS-only and certificates are verified, so a proxy tunnels encrypted traffic and cannot alter it.
 - **Stricter limits.** 10 proxied requests per minute per IP and at most 4 in progress server-wide (`429` beyond that), on top of the normal limit.
 - **Credentials are never logged or echoed back.** Send the proxy only in the header, never in the URL.
 

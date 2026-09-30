@@ -39,6 +39,14 @@ def enabled() -> ProxyPassthrough:
     return passthrough
 
 
+def _history_df() -> pd.DataFrame:
+    return pd.DataFrame({
+        "date": [pd.Timestamp("2024-01-05")],
+        "open": [1.0], "high": [2.0], "low": [0.5],
+        "close": [1.5], "volume": [10], "is_anomaly": [False],
+    })
+
+
 def _quote_df() -> pd.DataFrame:
     return pd.DataFrame([{"symbol": "ENGRO", "sector": "Fertilizer", "price": 300.0}])
 
@@ -147,7 +155,7 @@ class TestEndpoints:
         assert "not enabled" in resp.json()["error"]["message"]
         default_quote.assert_not_called()
 
-    def test_proxied_request_uses_pinned_proxy_and_no_cache(self, client, enabled):
+    def test_proxied_request_uses_pinned_proxy(self, client, enabled):
         with (
             patch.object(PSXClient, "quote", return_value=_quote_df()) as proxied_quote,
             patch("psxdata.quote") as default_quote,
@@ -155,26 +163,37 @@ class TestEndpoints:
             resp = client.get("/stocks/ENGRO/quote", headers={PROXY_HEADER: PROXY})
         assert resp.status_code == 200
         default_quote.assert_not_called()
-        proxied_quote.assert_called_once_with("ENGRO", cache=False)
+        proxied_quote.assert_called_once_with("ENGRO")  # SDK cache on, same as unproxied
         pooled = enabled._clients[PINNED]
         assert pooled._historical._session.proxies == {"http": PINNED, "https": PINNED}
 
-    def test_proxied_historical_bypasses_shared_cache(self, client, enabled):
-        df = pd.DataFrame({
-            "date": [pd.Timestamp("2024-01-05")],
-            "open": [1.0], "high": [2.0], "low": [0.5],
-            "close": [1.5], "volume": [10], "is_anomaly": [False],
-        })
-        with patch.object(PSXClient, "stocks", return_value=df) as proxied_stocks:
+    def test_proxied_historical_fills_shared_cache(self, client, enabled):
+        with (
+            patch.object(PSXClient, "stocks", return_value=_history_df()) as proxied_stocks,
+            patch("psxdata.stocks") as default_stocks,
+        ):
             resp = client.get("/stocks/ENGRO/historical", headers={PROXY_HEADER: PROXY})
-        assert resp.status_code == 200
-        assert resp.headers["X-Cache"] == "BYPASS"
-        assert resp.json()["meta"]["cached"] is False
-        proxied_stocks.assert_called_once_with("ENGRO", cache=False)
-        # The shared cache was not populated: an unproxied call still misses
-        with patch("psxdata.stocks", return_value=df):
+            assert resp.status_code == 200
+            assert resp.headers["X-Cache"] == "MISS"
+            proxied_stocks.assert_called_once_with("ENGRO", cache=False)
+
+            # Data fetched through a proxy serves everyone: an unproxied call is a HIT
             resp = client.get("/stocks/ENGRO/historical")
-        assert resp.headers["X-Cache"] == "MISS"
+            assert resp.headers["X-Cache"] == "HIT"
+            assert resp.json()["data"][0]["close"] == 1.5
+            default_stocks.assert_not_called()
+
+    def test_proxied_historical_reads_shared_cache(self, client, enabled):
+        with patch("psxdata.stocks", return_value=_history_df()):
+            client.get("/stocks/ENGRO/historical")
+        with patch.object(PSXClient, "stocks") as proxied_stocks:
+            resp = client.get("/stocks/ENGRO/historical", headers={PROXY_HEADER: PROXY})
+        assert resp.headers["X-Cache"] == "HIT"
+        proxied_stocks.assert_not_called()
+
+    def test_proxied_clients_share_the_default_disk_cache(self, enabled):
+        proxied = enabled._client_for(PINNED)
+        assert proxied._cache._cache.directory == PSXClient()._cache._cache.directory
 
     def test_private_proxy_rejected_with_400(self, client):
         app.state.proxy_passthrough = ProxyPassthrough(

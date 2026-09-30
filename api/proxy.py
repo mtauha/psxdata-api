@@ -12,8 +12,11 @@ the caller chose, so every proxy is checked before use:
   the connection is pinned to the checked IP, so DNS rebinding cannot point it
   somewhere else between the check and the request.
 - A short TCP connect check rejects dead proxies before any PSX request.
-- Proxied requests never read or write a shared cache.
 - Per-IP rate limit, a global concurrency cap, and a bounded pool of clients.
+
+Proxied requests share the same caches as all other requests: the proxy only
+changes the egress to PSX, not the data. PSX is HTTPS-only and certificates are
+verified, so a proxy tunnels TLS end to end and cannot alter what it relays.
 
 Credentials in the proxy URL are never logged or echoed back.
 """
@@ -22,7 +25,6 @@ from __future__ import annotations
 import ipaddress
 import os
 import socket
-import tempfile
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
@@ -135,8 +137,7 @@ def _proxy_key(pinned: str) -> frozenset[tuple[str, str]]:
 class PsxSource:
     """Where a request's PSX data comes from: the shared default client, or a proxied one.
 
-    Proxied calls always pass ``cache=False``, so a caller's proxy can never
-    read from or write to the cache shared by all callers.
+    Both read and write the same caches; only the route to PSX differs.
     """
 
     def __init__(self, client: PSXClient | None = None) -> None:
@@ -149,7 +150,7 @@ class PsxSource:
     def fetch(self, name: str, *args: Any, **kwargs: Any) -> Any:
         if self._client is None:
             return getattr(psxdata, name)(*args, **kwargs)
-        return getattr(self._client, name)(*args, cache=False, **kwargs)
+        return getattr(self._client, name)(*args, **kwargs)
 
 
 class ProxyPassthrough:
@@ -174,7 +175,6 @@ class ProxyPassthrough:
         self._slots = threading.BoundedSemaphore(max_concurrent)
         self._rate_limiter = MovingWindowRateLimiter(MemoryStorage())
         self._rate = RateLimitItemPerMinute(per_ip_per_minute)
-        self._cache_dir: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> ProxyPassthrough:
@@ -214,10 +214,8 @@ class ProxyPassthrough:
             if client is not None:
                 self._clients.move_to_end(pinned)
                 return client
-            if self._cache_dir is None:
-                # Never touched (proxied calls use cache=False), but kept apart from the shared one
-                self._cache_dir = tempfile.mkdtemp(prefix="psxdata-proxied-")
-            client = PSXClient(cache_dir=self._cache_dir, proxy=pinned)
+            # Default cache_dir: the same on-disk cache the module-level functions use
+            client = PSXClient(proxy=pinned)
             self._clients[pinned] = client
             if len(self._clients) > self._max_clients:
                 self._clients.popitem(last=False)
@@ -253,8 +251,8 @@ def psx_source(
         description=(
             "Optional proxy for this request's PSX traffic: http://, socks5:// or socks5h://, "
             "with an explicit port and optional user:pass@. Must resolve to a public address. "
-            "Proxied requests bypass the cache and have stricter limits. Only honoured when "
-            "the server enables proxy passthrough."
+            "Proxied requests share the normal cache but have stricter rate limits. Only "
+            "honoured when the server enables proxy passthrough."
         ),
     ),
 ) -> Iterator[PsxSource]:

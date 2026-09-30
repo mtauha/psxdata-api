@@ -18,7 +18,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - a 5-second TCP check runs first (`502 proxy_unreachable` on failure);
   - limits of 10 proxied requests per minute per IP and 4 concurrent server-wide;
   - a bounded pool of proxied clients.
-- Proxied requests never read or write the shared cache. `/historical` returns `X-Cache: BYPASS` for them.
+- Proxied requests use the same caches as all other requests. The proxy only changes the route to PSX: cached data is served without contacting PSX, and data fetched through a proxy is cached for everyone. PSX is HTTPS-only with certificate verification, so a proxy cannot alter what it relays.
 - Proxy credentials are never logged or echoed in error messages.
 
 ### Changed
