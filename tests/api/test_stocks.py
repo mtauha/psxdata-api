@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-from psxdata.exceptions import PSXParseError, PSXUnavailableError
+from psxdata.exceptions import PSXParseError, PSXRateLimitError, PSXUnavailableError
 
 from api.main import app
 
@@ -63,10 +63,10 @@ def test_historical_empty_returns_200_not_404(client: TestClient) -> None:
     assert resp.json()["data"] == []
 
 
-def test_historical_passes_date_params(client: TestClient) -> None:
+def test_historical_fetches_full_history_without_sdk_cache(client: TestClient) -> None:
     with patch("psxdata.stocks", return_value=pd.DataFrame()) as mock_stocks:
         client.get("/stocks/ENGRO/historical?start=2024-01-01&end=2024-12-31")
-    mock_stocks.assert_called_once_with("ENGRO", start="2024-01-01", end="2024-12-31")
+    mock_stocks.assert_called_once_with("ENGRO", cache=False)
 
 
 def test_quote_returns_200(client: TestClient) -> None:
@@ -139,3 +139,11 @@ def test_stocks_cors_header_present(client: TestClient) -> None:
     with patch("psxdata.tickers", return_value=[]):
         resp = client.get("/stocks", headers={"Origin": "https://example.com"})
     assert "access-control-allow-origin" in resp.headers
+
+
+def test_quote_psx_rate_limited_returns_503(client: TestClient) -> None:
+    with patch("psxdata.quote", side_effect=PSXRateLimitError("429")):
+        resp = client.get("/stocks/ENGRO/quote")
+    assert resp.status_code == 503
+    assert resp.headers["Retry-After"] == "60"
+    assert resp.json()["error"]["code"] == "psx_unavailable"

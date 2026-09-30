@@ -7,6 +7,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.3.0] — 2026-09-30
+
+### Added
+
+- `GET /stocks/{symbol}/historical` is now cached. Each symbol's full history is fetched from PSX once and reused for every `start`/`end` range. It stays fresh for 30 minutes during PSX trading hours (Mon–Fri 09:00–17:00 PKT) and until the next trading-day open otherwise. Responses carry `X-Cache: HIT | MISS | STALE`, an `Age` header on cached responses, and `meta.cached: true` when served from cache.
+- When PSX rate-limits the API or is unreachable, `/historical` serves the last cached copy (`X-Cache: STALE`) instead of failing.
+- Optional `REDIS_URL` environment variable: any Redis-compatible server (e.g. Aiven for Valkey) that keeps the cache across restarts and instances. Without it the cache is in-memory only. `HISTORICAL_CACHE_MARKET_TTL` (seconds, default `1800`) tunes trading-hours freshness.
+
+### Fixed
+
+- PSX rate-limiting (HTTP 429 from PSX) surfaced as `500 internal_error` on every endpoint (324 such responses on `/historical` on 2026-09-29). It now returns `503 psx_unavailable` with `Retry-After: 60`, and `/historical` stops calling PSX for 60 seconds after a 429.
+- Invalid `start`/`end` dates, or `start` after `end`, on `/historical` returned `500`; they now return `422 bad_request`.
+
+### Changed
+
+- `start`/`end` on `/historical` must be ISO dates (`YYYY-MM-DD`).
+- The OpenAPI spec is pushed to the docs site on release tags (`v*`) instead of every push to `main`, so public docs change only when a release is made.
+
+---
+
 ## [0.2.1] — 2026-09-26
 
 ### Fixed
