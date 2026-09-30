@@ -155,14 +155,14 @@ Send an `X-PSX-Proxy` header to have the API fetch that request's PSX data throu
 curl -H "X-PSX-Proxy: http://user:pass@proxy.example.com:8080"   https://psxdata-api.fastapicloud.dev/stocks/ENGRO/quote
 ```
 
-The server connects to an address you choose, so the proxy is checked before use:
+The proxy is only used when PSX has to be contacted: if the data is already in the API's cache, it's served straight from there and your proxy is never touched. When PSX must be fetched, the server connects to an address you choose, so the proxy is checked first:
 
 - **Only when enabled.** The server operator has to turn it on (`PSX_PROXY_PASSTHROUGH`). Otherwise the header is rejected with `400`.
 - **Schemes:** `http://`, `socks5://` or `socks5h://`, with an explicit port (80, 443, or 1024–65535) and optional `user:pass@`. `https://` proxies are not accepted.
 - **Public addresses only.** The proxy host must resolve only to public internet addresses. Loopback, private, link-local (including cloud metadata), CGNAT and multicast addresses are rejected. The connection is pinned to the checked IP, so the name cannot be re-pointed afterwards.
-- **Quick reachability check.** A proxy that doesn't accept a TCP connection within 5 seconds returns `502 proxy_unreachable`.
+- **Quick reachability check.** On a cache miss, a proxy that doesn't accept a TCP connection within 5 seconds returns `502 proxy_unreachable`.
 - **Same cache as everyone else.** The proxy only changes the route to PSX, not the data. Proxied requests are served from the cache when it's fresh, and what they fetch is cached for all callers. PSX is HTTPS-only and certificates are verified, so a proxy tunnels encrypted traffic and cannot alter it.
-- **Stricter limits.** 10 proxied requests per minute per IP and at most 4 in progress server-wide (`429` beyond that), on top of the normal limit.
+- **Stricter limits on PSX fetches.** Requests that go through your proxy to PSX are limited to 10 per minute per IP, with at most 4 in progress server-wide (`429` beyond that). Requests answered from the cache don't count toward this, only toward the normal limit.
 - **Credentials are never logged or echoed back.** Send the proxy only in the header, never in the URL.
 
 ---
