@@ -98,6 +98,8 @@ Every response wraps its payload in a consistent envelope.
 }
 ```
 
+`meta.cached` is `true` when the response was served from the API's cache (currently `/stocks/{symbol}/historical`; see [Caching](#caching)).
+
 **Error response**
 ```json
 {
@@ -113,7 +115,7 @@ Every response wraps its payload in a consistent envelope.
 | 404 | `not_found` | Symbol or index does not exist |
 | 429 | `rate_limited` | Exceeded 60 requests/minute per IP |
 | 502 | `upstream_data_error` | Upstream PSX data failed validation |
-| 503 | `psx_unavailable` | PSX website unreachable |
+| 503 | `psx_unavailable` | PSX website unreachable, or PSX is rate-limiting the API (sent with a `Retry-After` header) |
 | 500 | `internal_error` | Unexpected server error |
 
 ---
@@ -121,6 +123,43 @@ Every response wraps its payload in a consistent envelope.
 ## Rate Limiting
 
 60 requests per minute per IP address. Exceeding the limit returns `429 rate_limited`.
+
+---
+
+## Caching
+
+`GET /stocks/{symbol}/historical` is served from a cache. PSX always returns a symbol's full history, so the API fetches it once and slices it to your `start`/`end` range.
+
+| When the data was fetched | Stays fresh until |
+| ------------------------- | ----------------- |
+| Mon–Fri 09:00–17:00 PKT (trading hours) | 30 minutes later, but no later than 17:00 |
+| Any other time | The next weekday 09:00 PKT |
+
+Every `/historical` response says where it came from:
+
+| Header | Values |
+| ------ | ------ |
+| `X-Cache` | `HIT` — fresh cached copy · `MISS` — fetched from PSX just now · `STALE` — PSX refused or was unreachable, so the last cached copy was served |
+| `Age` | Seconds since the data was fetched from PSX (on `HIT` and `STALE`) |
+
+`meta.cached` is `true` for `HIT` and `STALE`. If PSX is rate-limiting and no cached copy exists, the API returns `503 psx_unavailable` with `Retry-After: 60`.
+
+---
+
+## Configuration
+
+All settings are optional environment variables.
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `REDIS_URL` | unset | Redis-compatible server for the `/historical` cache, e.g. an [Aiven for Valkey](https://aiven.io/valkey) service URI (`rediss://default:<password>@<host>:<port>`). Keeps the cache across restarts and instances. When unset, or when the server is unreachable, the API falls back to an in-memory cache and keeps working. |
+| `HISTORICAL_CACHE_MARKET_TTL` | `1800` | How long, in seconds, `/historical` data stays fresh during PSX trading hours. |
+
+```bash
+docker run -p 8000:8000 -e REDIS_URL="rediss://default:<password>@<host>:<port>" mtauha/psxdata-api
+```
+
+On FastAPI Cloud, set it as an app environment variable (`fastapi cloud env`) rather than committing it.
 
 ---
 
