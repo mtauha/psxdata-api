@@ -1,0 +1,124 @@
+"""Cache-first access to full symbol histories.
+
+PSX always returns a symbol's whole history, so one entry per symbol serves every date range.
+Concurrent misses for one symbol share a single PSX fetch. When PSX refuses (429) or is
+unavailable, the last cached copy is served as STALE. After a 429, PSX is not called again for
+``cooldown_seconds``.
+"""
+from __future__ import annotations
+
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from typing import Any
+
+from psxdata.exceptions import PSXRateLimitError, PSXUnavailableError
+
+from api.cache.codec import CacheEntry, decode, encode
+from api.cache.freshness import DEFAULT_MARKET_TTL, fresh_until
+from api.cache.store import TieredStore
+
+PSX_COOLDOWN_SECONDS = 60
+COOLDOWN_MESSAGE = "PSX is rate-limiting requests; retry later"
+
+Row = dict[str, Any]
+Fetcher = Callable[[str], list[Row]]
+
+
+class CacheStatus(str, Enum):
+    HIT = "HIT"
+    MISS = "MISS"
+    STALE = "STALE"
+
+
+@dataclass(frozen=True)
+class CacheResult:
+    rows: list[Row]
+    status: CacheStatus
+    fetched_at: datetime
+
+
+def cache_key(symbol: str) -> str:
+    return f"psxdata-api:v1:historical:{symbol.upper()}"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class HistoricalService:
+    def __init__(
+        self,
+        store: TieredStore,
+        *,
+        market_ttl: timedelta = DEFAULT_MARKET_TTL,
+        cooldown_seconds: float = PSX_COOLDOWN_SECONDS,
+        now: Callable[[], datetime] = _utcnow,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.store = store
+        self._market_ttl = market_ttl
+        self._cooldown = cooldown_seconds
+        self._now = now
+        self._monotonic = monotonic
+        self._blocked_until = 0.0
+        self._state_lock = threading.Lock()
+        self._locks: dict[str, threading.Lock] = {}
+
+    def get(self, symbol: str, fetch: Fetcher) -> CacheResult:
+        symbol = symbol.upper()
+        key = cache_key(symbol)
+        entry = self._load(key)
+        if entry is not None and self._is_fresh(entry):
+            return CacheResult(entry.rows, CacheStatus.HIT, entry.fetched_at)
+
+        with self._lock_for(key):
+            entry = self._load(key)
+            if entry is not None and self._is_fresh(entry):
+                return CacheResult(entry.rows, CacheStatus.HIT, entry.fetched_at)
+            if self._in_cooldown():
+                return self._fallback(entry, PSXRateLimitError(COOLDOWN_MESSAGE))
+            try:
+                rows = fetch(symbol)
+            except PSXRateLimitError as exc:
+                self._start_cooldown()
+                return self._fallback(entry, exc)
+            except PSXUnavailableError as exc:
+                return self._fallback(entry, exc)
+
+            rows = sorted(rows, key=lambda row: row.get("date") or "", reverse=True)
+            fetched_at = self._now()
+            fresh = CacheEntry(symbol, fetched_at, fresh_until(fetched_at, self._market_ttl), rows)
+            self.store.put(key, encode(fresh))
+            return CacheResult(rows, CacheStatus.MISS, fetched_at)
+
+    def close(self) -> None:
+        self.store.close()
+
+    def _load(self, key: str) -> CacheEntry | None:
+        blob = self.store.get(key)
+        return decode(blob) if blob is not None else None
+
+    def _is_fresh(self, entry: CacheEntry) -> bool:
+        return self._now() < entry.fresh_until
+
+    def _lock_for(self, key: str) -> threading.Lock:
+        with self._state_lock:
+            return self._locks.setdefault(key, threading.Lock())
+
+    def _in_cooldown(self) -> bool:
+        with self._state_lock:
+            return self._monotonic() < self._blocked_until
+
+    def _start_cooldown(self) -> None:
+        with self._state_lock:
+            self._blocked_until = self._monotonic() + self._cooldown
+
+    @staticmethod
+    def _fallback(entry: CacheEntry | None, exc: Exception) -> CacheResult:
+        if entry is None:
+            raise exc
+        return CacheResult(entry.rows, CacheStatus.STALE, entry.fetched_at)
