@@ -1,14 +1,15 @@
 """Cache-first access to full symbol histories.
 
 PSX always returns a symbol's whole history, so one entry per symbol serves every date range.
-Concurrent misses for one symbol share a single PSX fetch. When PSX refuses (429) or is
-unavailable, the last cached copy is served as STALE. After a 429, PSX is not called again for
-``cooldown_seconds``.
+Concurrent misses for one symbol share a single PSX fetch via a fixed pool of striped locks.
+When PSX refuses (429) or is unavailable, the last cached copy is served as STALE. After a 429,
+PSX is not called again for ``cooldown_seconds``.
 """
 from __future__ import annotations
 
 import threading
 import time
+import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,7 @@ from api.cache.codec import CacheEntry, decode, encode
 from api.cache.freshness import DEFAULT_MARKET_TTL, fresh_until
 from api.cache.store import TieredStore
 
+LOCK_STRIPES = 256
 PSX_COOLDOWN_SECONDS = 60
 COOLDOWN_MESSAGE = "PSX is rate-limiting requests; retry later"
 
@@ -66,7 +68,7 @@ class HistoricalService:
         self._monotonic = monotonic
         self._blocked_until = 0.0
         self._state_lock = threading.Lock()
-        self._locks: dict[str, threading.Lock] = {}
+        self._locks = [threading.Lock() for _ in range(LOCK_STRIPES)]
 
     def get(self, symbol: str, fetch: Fetcher) -> CacheResult:
         symbol = symbol.upper()
@@ -106,8 +108,7 @@ class HistoricalService:
         return self._now() < entry.fresh_until
 
     def _lock_for(self, key: str) -> threading.Lock:
-        with self._state_lock:
-            return self._locks.setdefault(key, threading.Lock())
+        return self._locks[zlib.crc32(key.encode()) % LOCK_STRIPES]
 
     def _in_cooldown(self) -> bool:
         with self._state_lock:

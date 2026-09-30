@@ -2,6 +2,7 @@
 import gzip
 import json
 import threading
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
@@ -14,7 +15,7 @@ from psxdata.exceptions import (
     PSXUnavailableError,
 )
 
-from api.cache.historical import CacheStatus, HistoricalService, cache_key
+from api.cache.historical import LOCK_STRIPES, CacheStatus, HistoricalService, cache_key
 from api.cache.store import MemoryLRU, RedisStore, TieredStore
 
 ASCENDING_ROWS = [
@@ -224,6 +225,8 @@ def test_concurrent_requests_for_one_symbol_fetch_once(clock: Clock) -> None:
 
 
 def test_different_symbols_do_not_block_each_other(clock: Clock) -> None:
+    stripe = lambda s: zlib.crc32(cache_key(s).encode()) % LOCK_STRIPES  # noqa: E731
+    assert stripe("AAA") != stripe("BBB")
     service = make_service(clock)
     started, release = threading.Event(), threading.Event()
 
