@@ -1,0 +1,38 @@
+name: Deploy
+
+# Deploys to FastAPI Cloud with a deploy token once CI has passed on main.
+# Needs repo secrets FASTAPI_CLOUD_TOKEN (deploy token) and FASTAPI_CLOUD_APP_ID.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: fastapi-cloud-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install FastAPI Cloud CLI
+        run: pip install fastapi-cloud-cli
+      - name: Deploy to FastAPI Cloud
+        run: fastapi deploy
+        env:
+          FASTAPI_CLOUD_TOKEN: ${{ secrets.FASTAPI_CLOUD_TOKEN }}
+          FASTAPI_CLOUD_APP_ID: ${{ secrets.FASTAPI_CLOUD_APP_ID }}
