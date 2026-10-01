@@ -1,6 +1,6 @@
 # psxdata-api — REST API for Pakistan Stock Exchange (PSX) Data
 
-[![CI](https://github.com/mtauha/psxdata-api/actions/workflows/ci.yml/badge.svg)](https://github.com/mtauha/psxdata-api/actions/workflows/ci.yml)
+[![CI](https://github.com/psxdata/psxdata-api/actions/workflows/ci.yml/badge.svg)](https://github.com/psxdata/psxdata-api/actions/workflows/ci.yml)
 [![Documentation](https://img.shields.io/badge/docs-mintlify-blue)](https://psxdata.mintlify.app/rest-api)
 [![API](https://img.shields.io/badge/api-live-brightgreen)](https://psxdata-api.fastapicloud.dev)
 [![Docker Hub](https://img.shields.io/docker/v/mtauha/psxdata-api?label=Docker+Hub)](https://hub.docker.com/r/mtauha/psxdata-api)
@@ -228,6 +228,6 @@ Requires Python 3.11+.
 
 ## Related
 
-- **[psxdata](https://github.com/mtauha/psxdata)** — Python library this service wraps
+- **[psxdata](https://github.com/psxdata/psxdata)** — Python library this service wraps
 - **[psxdata on PyPI](https://pypi.org/project/psxdata/)** — installable package
 - **[mtauha/psxdata-api on Docker Hub](https://hub.docker.com/r/mtauha/psxdata-api)** — Docker image

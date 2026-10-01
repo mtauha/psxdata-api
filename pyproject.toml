@@ -34,9 +34,9 @@ dev = [
 entrypoint = "api.main:app"
 
 [project.urls]
-Homepage = "https://github.com/mtauha/psxdata-api"
-Source = "https://github.com/mtauha/psxdata-api"
-"Bug Tracker" = "https://github.com/mtauha/psxdata-api/issues"
+Homepage = "https://github.com/psxdata/psxdata-api"
+Source = "https://github.com/psxdata/psxdata-api"
+"Bug Tracker" = "https://github.com/psxdata/psxdata-api/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

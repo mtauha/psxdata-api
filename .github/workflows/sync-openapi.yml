@@ -31,7 +31,7 @@ jobs:
         env:
           DOCS_REPO_TOKEN: ${{ secrets.DOCS_REPO_TOKEN }}
         run: |
-          git clone https://x-access-token:${DOCS_REPO_TOKEN}@github.com/mtauha/psxdata-docs.git /tmp/psxdata-docs
+          git clone https://x-access-token:${DOCS_REPO_TOKEN}@github.com/psxdata/psxdata-docs.git /tmp/psxdata-docs
           cp openapi.json /tmp/psxdata-docs/openapi.json
           cd /tmp/psxdata-docs
           git config user.name "github-actions[bot]"

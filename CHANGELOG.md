@@ -52,7 +52,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
-- Every data endpoint (`/stocks`, `/indices`, `/sectors`, `/sectors/{name}/stocks`, `/screener`) was returning `502 upstream_data_error` since 2026-09-24, because PSX started requiring an `X-Req-Id` request token on its data endpoints and the pinned `psxdata` version had no way to send one. Bumped the `psxdata` pin to `1.1.1`, which fetches and sends the token automatically ([mtauha/psxdata#161](https://github.com/mtauha/psxdata/issues/161)). No API changes on our side.
+- Every data endpoint (`/stocks`, `/indices`, `/sectors`, `/sectors/{name}/stocks`, `/screener`) was returning `502 upstream_data_error` since 2026-09-24, because PSX started requiring an `X-Req-Id` request token on its data endpoints and the pinned `psxdata` version had no way to send one. Bumped the `psxdata` pin to `1.1.1`, which fetches and sends the token automatically ([mtauha/psxdata#161](https://github.com/psxdata/psxdata/issues/161)). No API changes on our side.
 
 ---
 
@@ -80,7 +80,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
-- `GET /sectors/{name}/stocks` no longer returns a bare `500 Internal Server Error`. It called `psxdata.symbols()`, which existed in the SDK's git source but had never been published to PyPI. Bumped the `psxdata` pin to `0.1.0a4`, which ships it (fixes [#1](https://github.com/mtauha/psxdata-api/issues/1)).
+- `GET /sectors/{name}/stocks` no longer returns a bare `500 Internal Server Error`. It called `psxdata.symbols()`, which existed in the SDK's git source but had never been published to PyPI. Bumped the `psxdata` pin to `0.1.0a4`, which ships it (fixes [#1](https://github.com/psxdata/psxdata-api/issues/1)).
 
 ### Changed
 
@@ -92,7 +92,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
-- `GET /stocks?index=<invalid>` no longer returns a bare `500 Internal Server Error`. `PSXParseError` (raised when PSX rejects an unknown index name) is now caught and returns `400 bad_request` with a descriptive message (fixes [#2](https://github.com/mtauha/psxdata-api/issues/2)).
+- `GET /stocks?index=<invalid>` no longer returns a bare `500 Internal Server Error`. `PSXParseError` (raised when PSX rejects an unknown index name) is now caught and returns `400 bad_request` with a descriptive message (fixes [#2](https://github.com/psxdata/psxdata-api/issues/2)).
 - Pydantic validation failures when building response models from upstream PSX data (e.g. a missing/renamed field) now return `502 upstream_data_error` instead of an opaque `500`, and are logged server-side via `logger.exception` for diagnosis.
 - The generic unhandled-exception handler now logs the exception instead of silently discarding it.
 
@@ -102,7 +102,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- Initial release — REST API service extracted from [mtauha/psxdata](https://github.com/mtauha/psxdata) with full git history preserved via `git filter-repo`.
+- Initial release — REST API service extracted from [mtauha/psxdata](https://github.com/psxdata/psxdata) with full git history preserved via `git filter-repo`.
 - `GET /health` — liveness check returning `{"data": {"status": "ok"}, "meta": {"timestamp": ..., "cached": false}}`.
 - `GET /stocks` — real-time trading panel data across all 15 board combinations.
 - `GET /indices` — all 18 PSX index values.
@@ -119,13 +119,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Known Issues
 
-- `GET /sectors/{name}/stocks` returns an empty list — `psxdata.symbols()` is not yet part of the public `psxdata` API (tracked in [#1](https://github.com/mtauha/psxdata-api/issues/1)).
+- `GET /sectors/{name}/stocks` returns an empty list — `psxdata.symbols()` is not yet part of the public `psxdata` API (tracked in [#1](https://github.com/psxdata/psxdata-api/issues/1)).
 
 ---
 
-[0.2.1]: https://github.com/mtauha/psxdata-api/releases/tag/v0.2.1
-[0.2.0]: https://github.com/mtauha/psxdata-api/releases/tag/v0.2.0
-[0.1.3]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.3
-[0.1.2]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.2
-[0.1.1]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.1
-[0.1.0]: https://github.com/mtauha/psxdata-api/releases/tag/v0.1.0
+[0.2.1]: https://github.com/psxdata/psxdata-api/releases/tag/v0.2.1
+[0.2.0]: https://github.com/psxdata/psxdata-api/releases/tag/v0.2.0
+[0.1.3]: https://github.com/psxdata/psxdata-api/releases/tag/v0.1.3
+[0.1.2]: https://github.com/psxdata/psxdata-api/releases/tag/v0.1.2
+[0.1.1]: https://github.com/psxdata/psxdata-api/releases/tag/v0.1.1
+[0.1.0]: https://github.com/psxdata/psxdata-api/releases/tag/v0.1.0
