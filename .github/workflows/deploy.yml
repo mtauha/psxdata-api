@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install FastAPI Cloud CLI
-        run: pip install fastapi-cloud-cli
+        run: pip install "fastapi[standard]"
       - name: Deploy to FastAPI Cloud
         run: fastapi deploy
         env:
