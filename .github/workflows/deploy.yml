@@ -1,12 +1,11 @@
 name: Deploy
+run-name: "Deploy ${{ github.ref_name }} to FastAPI Cloud"
 
-# Deploys to FastAPI Cloud with a deploy token once CI has passed on main.
+# Deploys to FastAPI Cloud with a deploy token when a GitHub release is published.
 # Needs repo secrets FASTAPI_CLOUD_TOKEN (deploy token) and FASTAPI_CLOUD_APP_ID.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions: {}
@@ -18,14 +17,12 @@ concurrency:
 jobs:
   deploy:
     name: deploy
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
