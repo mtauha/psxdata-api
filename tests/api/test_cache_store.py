@@ -142,3 +142,14 @@ def test_tiered_works_when_l2_is_down() -> None:
     tiered = TieredStore(MemoryLRU(), RedisStore(DownRedis()))
     tiered.put("k", b"v")
     assert tiered.get("k") == b"v"
+
+
+def test_get_with_tier_reports_which_layer_answered():
+    tiered = TieredStore(MemoryLRU(), RedisStore(fakeredis.FakeRedis()))
+    assert tiered.get_with_tier("k") == (None, "none")
+    tiered.put("k", b"v")
+    assert tiered.get_with_tier("k") == (b"v", "memory")
+    tiered.l1 = MemoryLRU()  # simulate a restart: only Redis still has it
+    assert tiered.get_with_tier("k") == (b"v", "redis")
+    assert tiered.get_with_tier("k") == (b"v", "memory")  # refilled L1
+    assert tiered.get("k") == b"v"

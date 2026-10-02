@@ -129,13 +129,18 @@ class TieredStore:
         self.l2 = l2
 
     def get(self, key: str) -> bytes | None:
+        return self.get_with_tier(key)[0]
+
+    def get_with_tier(self, key: str) -> tuple[bytes | None, str]:
+        """Like ``get``, plus which tier answered: "memory", "redis" or "none"."""
         value = self.l1.get(key)
         if value is not None:
-            return value
+            return value, "memory"
         value = self.l2.get(key)
         if value is not None:
             self.l1.set(key, value)
-        return value
+            return value, "redis"
+        return None, "none"
 
     def put(self, key: str, value: bytes) -> None:
         self.l1.set(key, value)

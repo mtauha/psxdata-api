@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psxdata-api"
-version = "0.4.0"
+dynamic = ["version"]
 description = "FastAPI REST service for Pakistan Stock Exchange (PSX) data"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE.md"}
 dependencies = [
     "psxdata[socks]==1.2.0",
-    "fastapi[standard]>=0.100",
+    "fastapi[standard]>=0.142.0,<0.143",
+    "opentelemetry-sdk>=1.45,<1.46",
     "uvicorn[standard]>=0.23",
     "slowapi>=0.1",
     "redis>=4.5",
@@ -37,6 +38,9 @@ entrypoint = "api.main:app"
 Homepage = "https://github.com/psxdata/psxdata-api"
 Source = "https://github.com/psxdata/psxdata-api"
 "Bug Tracker" = "https://github.com/psxdata/psxdata-api/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "api.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["."]

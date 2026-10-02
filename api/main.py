@@ -22,6 +22,7 @@ from api.cache.historical import COOLDOWN_MESSAGE, PSX_COOLDOWN_SECONDS
 from api.dependencies import limiter
 from api.proxy import ProxyPassthrough, ProxyUnreachableError
 from api.routers import router_registry
+from api.telemetry import TELEMETRY, ServerSpanTags
 
 logger = logging.getLogger("api")
 
@@ -35,16 +36,21 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        service.close()
+        try:
+            service.close()
+        finally:
+            TELEMETRY.flush()
 
 
 app = FastAPI(
     title="psxdata",
     lifespan=lifespan,
     servers=[{"url": "https://psxdata-api.fastapicloud.dev"}],
+    telemetry=TELEMETRY.config,
 )
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(ServerSpanTags)
 
 app.add_middleware(
     CORSMiddleware,
