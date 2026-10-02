@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.5.0] — 2026-10-02
+
+### Added
+
+- OpenTelemetry telemetry using FastAPI's native support. Spans are written to stdout as one JSON object per line, so they reach the existing log export.
+- Custom spans: `cache.historical` (HIT, MISS or STALE, memory/redis/none tier, cooldown) and `psx.fetch` (SDK function, proxied, cache-only hit).
+- Request spans carry the client address and service version. `/health` is excluded and no request headers are recorded.
+- `PSX_TELEMETRY=off` disables telemetry.
+
+### Changed
+
+- Requires `fastapi[standard]>=0.142.0` and adds `opentelemetry-sdk>=1.45`.
+
+---
+
 ## [0.4.0] — 2026-09-30
 
 ### Added
