@@ -12,7 +12,6 @@ import sys
 import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from importlib.metadata import PackageNotFoundError, version
 from typing import Any, TextIO
 
 from fastapi.telemetry import TelemetryConfig
@@ -26,7 +25,10 @@ from opentelemetry.sdk._logs.export import (
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
+from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+from api import __version__
 
 SERVICE_NAME = "psxdata-api"
 LINE_VERSION = 1
@@ -34,10 +36,7 @@ MAX_STACKTRACE = 8192
 KILL_SWITCH_ENV = "PSX_TELEMETRY"
 _TRUNCATED = "…[truncated]"
 
-try:
-    SERVICE_VERSION = version("psxdata-api")
-except PackageNotFoundError:  # running from a source tree without an install (Docker image)
-    SERVICE_VERSION = "unknown"
+SERVICE_VERSION = __version__
 
 
 def _hex(value: int, width: int) -> str | None:
@@ -49,6 +48,7 @@ def _dumps(data: dict[str, Any]) -> str:
 
 
 def span_line(span: ReadableSpan) -> str:
+    """Span events and links are intentionally not serialized: exception events carry text."""
     context = span.context
     return _dumps({
         "otel": "span",
@@ -70,6 +70,9 @@ def _log_attributes(attributes: Mapping[str, Any] | None) -> dict[str, Any]:
     stack = out.get("exception.stacktrace")
     if isinstance(stack, str) and len(stack) > MAX_STACKTRACE:
         out["exception.stacktrace"] = stack[:MAX_STACKTRACE] + _TRUNCATED
+    message = out.get("exception.message")
+    if isinstance(message, str) and len(message) > MAX_STACKTRACE:
+        out["exception.message"] = message[:MAX_STACKTRACE] + _TRUNCATED
     return out
 
 
@@ -154,7 +157,7 @@ def build_telemetry(
     log_exporter: LogRecordExporter | None = None,
 ) -> Telemetry:
     resource = Resource.create({"service.name": SERVICE_NAME, "service.version": SERVICE_VERSION})
-    tracer_provider = TracerProvider(resource=resource)
+    tracer_provider = TracerProvider(resource=resource, sampler=ALWAYS_ON)
     tracer_provider.add_span_processor(
         BatchSpanProcessor(span_exporter or JsonLineSpanExporter())
     )

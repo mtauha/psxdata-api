@@ -185,3 +185,26 @@ def test_kill_switch_app_still_serves():
         return {"ok": True}
 
     assert TestClient(tiny).get("/ping").json() == {"ok": True}
+
+
+def test_unsampled_client_traceparent_is_still_recorded(otel):
+    headers = {"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-00"}
+    with patch("psxdata.tickers", return_value=["HBL"]):
+        resp = TestClient(app).get("/stocks", headers=headers)
+    assert resp.status_code == 200
+    (span,) = otel.server_spans()
+    assert span.context.trace_flags.sampled
+
+
+def test_service_version_comes_from_the_package():
+    import api
+
+    assert telemetry.SERVICE_VERSION == api.__version__
+
+
+def test_log_line_truncates_long_exception_message():
+    message = "m" * (telemetry.MAX_STACKTRACE + 500)
+    data = json.loads(telemetry.log_line(_recorded_log(attributes={"exception.message": message})))
+    out = data["attributes"]["exception.message"]
+    assert out.endswith("…[truncated]")
+    assert len(out) == telemetry.MAX_STACKTRACE + len("…[truncated]")

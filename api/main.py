@@ -36,8 +36,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        service.close()
-        TELEMETRY.flush()
+        try:
+            service.close()
+        finally:
+            TELEMETRY.flush()
 
 
 app = FastAPI(
