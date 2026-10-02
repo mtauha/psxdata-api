@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import io
 import json
+from unittest.mock import patch
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from opentelemetry import trace
+from opentelemetry._logs import SeverityNumber
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import (
     InMemoryLogRecordExporter,
@@ -14,9 +18,9 @@ from opentelemetry.sdk._logs.export import (
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from opentelemetry._logs import SeverityNumber
 
 from api import telemetry
+from api.main import app
 
 
 def _recorded_spans():
@@ -131,3 +135,53 @@ def test_build_telemetry_kill_switch():
     assert t.enabled is False
     assert t.config == {"tracing": False, "logs": False, "metrics": False}
     assert isinstance(t.tracer, trace.NoOpTracer)
+
+
+def test_request_produces_one_tagged_server_span(otel):
+    with patch("psxdata.tickers", return_value=["HBL"]):
+        resp = TestClient(app).get("/stocks")
+    assert resp.status_code == 200
+    (span,) = otel.server_spans()
+    attrs = dict(span.attributes)
+    assert span.name == "GET /stocks"
+    assert attrs["http.route"] == "/stocks"
+    assert attrs["http.request.method"] == "GET"
+    assert attrs["http.response.status_code"] == 200
+    assert attrs["client.address"] == "testclient"  # scope client, same source as uvicorn's log
+    assert attrs["service.version"] == telemetry.SERVICE_VERSION
+
+
+def test_health_is_not_traced(otel):
+    assert TestClient(app).get("/health").status_code == 200
+    assert otel.server_spans() == []
+
+
+def test_unhandled_exception_logs_linked_error(otel):
+    with patch("psxdata.tickers", side_effect=RuntimeError("kaboom")):
+        resp = TestClient(app, raise_server_exceptions=False).get("/stocks")
+    assert resp.status_code == 500
+    (span,) = otel.server_spans()
+    (log,) = otel.logs.get_finished_logs()
+    assert log.log_record.severity_text == "ERROR"
+    assert log.log_record.trace_id == span.context.trace_id
+    assert log.log_record.attributes["exception.type"] == "RuntimeError"
+
+
+def test_handled_4xx_produces_no_error_log(otel):
+    # _parse_date raises HTTPException(422): a handled error, so no telemetry log record
+    assert TestClient(app).get("/stocks/HBL/historical?start=nope").status_code == 422
+    assert otel.logs.get_finished_logs() == ()
+    (span,) = otel.server_spans()
+    assert span.attributes["http.response.status_code"] == 422
+
+
+def test_kill_switch_app_still_serves():
+    off = telemetry.build_telemetry({"PSX_TELEMETRY": "off"})
+    tiny = FastAPI(telemetry=off.config)
+    tiny.add_middleware(telemetry.ServerSpanTags)
+
+    @tiny.get("/ping")
+    def ping() -> dict:
+        return {"ok": True}
+
+    assert TestClient(tiny).get("/ping").json() == {"ok": True}

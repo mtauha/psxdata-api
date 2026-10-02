@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, TextIO
 
+from fastapi.telemetry import TelemetryConfig
 from opentelemetry import trace
 from opentelemetry.sdk._logs import LoggerProvider, ReadableLogRecord
 from opentelemetry.sdk._logs.export import (
@@ -25,6 +26,7 @@ from opentelemetry.sdk._logs.export import (
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 SERVICE_NAME = "psxdata-api"
 LINE_VERSION = 1
@@ -134,7 +136,7 @@ class Telemetry:
     enabled: bool
     tracer_provider: TracerProvider
     logger_provider: LoggerProvider
-    config: dict[str, Any]
+    config: TelemetryConfig
     tracer: trace.Tracer
 
     def flush(self) -> None:
@@ -169,7 +171,7 @@ def build_telemetry(
             {"tracing": False, "logs": False, "metrics": False},
             trace.NoOpTracer(),
         )
-    config: dict[str, Any] = {
+    config: TelemetryConfig = {
         "tracer_provider": tracer_provider,
         "logger_provider": logger_provider,
         "metrics": False,  # request metrics are derived from spans in SQL
@@ -187,3 +189,23 @@ TELEMETRY = build_telemetry(os.environ)
 
 def get_tracer() -> trace.Tracer:
     return TELEMETRY.tracer
+
+
+class ServerSpanTags:
+    """Adds what FastAPI's server span lacks: the client address and the service version.
+
+    Runs inside FastAPI's telemetry layer, so the request's server span is current here.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            span = trace.get_current_span()
+            if span.is_recording():
+                client = scope.get("client")
+                if client:
+                    span.set_attribute("client.address", client[0])
+                span.set_attribute("service.version", SERVICE_VERSION)
+        await self.app(scope, receive, send)
