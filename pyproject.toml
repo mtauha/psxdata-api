@@ -11,7 +11,8 @@ requires-python = ">=3.11"
 license = {file = "LICENSE.md"}
 dependencies = [
     "psxdata[socks]==1.2.0",
-    "fastapi[standard]>=0.100",
+    "fastapi[standard]>=0.142.0",
+    "opentelemetry-sdk>=1.45",
     "uvicorn[standard]>=0.23",
     "slowapi>=0.1",
     "redis>=4.5",
