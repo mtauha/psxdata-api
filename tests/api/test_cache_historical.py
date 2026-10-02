@@ -1,6 +1,7 @@
 """Tests for HistoricalService: hit/miss, expiry, stale fallback, cooldown, single-flight."""
 import gzip
 import json
+import redis
 import threading
 import zlib
 from concurrent.futures import ThreadPoolExecutor
@@ -242,3 +243,71 @@ def test_different_symbols_do_not_block_each_other(clock: Clock) -> None:
         assert not blocked.done()
         release.set()
         blocked.result(5)
+
+
+def _attrs(otel, name="cache.historical"):
+    return dict(otel.span(name).attributes)
+
+
+def test_span_on_miss_then_hit(clock: Clock, otel) -> None:
+    service = make_service(clock)
+    service.get("hbl", FakeFetch())
+    assert _attrs(otel) == {"psxdata.symbol": "HBL", "cache.status": "MISS", "cache.tier": "none"}
+    otel.spans.clear()
+    service.get("HBL", FakeFetch())
+    assert _attrs(otel) == {"psxdata.symbol": "HBL", "cache.status": "HIT", "cache.tier": "memory"}
+
+
+def test_span_on_stale_after_rate_limit(clock: Clock, otel) -> None:
+    service = make_service(clock)
+    service.get("HBL", FakeFetch())
+    clock.advance(10 * 24 * 3600)  # well past any freshness window
+    otel.spans.clear()
+    limited = FakeFetch()
+    limited.error = PSXRateLimitError("429")
+    assert service.get("HBL", limited).status is CacheStatus.STALE
+    assert _attrs(otel) == {
+        "psxdata.symbol": "HBL", "cache.status": "STALE", "cache.tier": "memory",
+        "psxdata.cooldown": True,
+    }
+
+
+def test_span_records_error_when_nothing_cached(clock: Clock, otel) -> None:
+    limited = FakeFetch()
+    limited.error = PSXRateLimitError("429")
+    with pytest.raises(PSXRateLimitError):
+        make_service(clock).get("HBL", limited)
+    span = otel.span("cache.historical")
+    assert span.status.status_code.name == "ERROR"
+    assert "cache.status" not in span.attributes
+
+
+class _DownRedis:
+    def get(self, key):
+        raise redis.ConnectionError("down")
+
+    def set(self, key, value, ex=None):
+        raise redis.ConnectionError("down")
+
+    def close(self) -> None:
+        pass
+
+
+def test_cache_tier_when_redis_down(clock: Clock, otel) -> None:
+    service = make_service(clock, l2_client=_DownRedis())
+    assert service.get("HBL", FakeFetch()).status is CacheStatus.MISS
+    assert _attrs(otel)["cache.tier"] == "none"
+    otel.spans.clear()
+    assert service.get("HBL", FakeFetch()).status is CacheStatus.HIT
+    assert _attrs(otel)["cache.tier"] == "memory"
+
+
+def test_miss_nests_fetch_span_under_cache_span(clock: Clock, otel) -> None:
+    from api.telemetry import get_tracer
+
+    def fetch(symbol: str):
+        with get_tracer().start_as_current_span("psx.fetch"):
+            return FakeFetch()(symbol)
+
+    make_service(clock).get("HBL", fetch)
+    assert otel.span("psx.fetch").parent.span_id == otel.span("cache.historical").context.span_id

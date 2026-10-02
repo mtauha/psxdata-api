@@ -16,11 +16,13 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 
+from opentelemetry.trace import Span
 from psxdata.exceptions import PSXRateLimitError, PSXUnavailableError
 
 from api.cache.codec import CacheEntry, decode, encode
 from api.cache.freshness import DEFAULT_MARKET_TTL, fresh_until
 from api.cache.store import TieredStore
+from api.telemetry import get_tracer
 
 LOCK_STRIPES = 256
 PSX_COOLDOWN_SECONDS = 60
@@ -51,6 +53,12 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _traced(span: Span, result: CacheResult, tier: str) -> CacheResult:
+    span.set_attribute("cache.status", result.status.value)
+    span.set_attribute("cache.tier", tier)
+    return result
+
+
 class HistoricalService:
     def __init__(
         self,
@@ -73,36 +81,47 @@ class HistoricalService:
     def get(self, symbol: str, fetch: Fetcher) -> CacheResult:
         symbol = symbol.upper()
         key = cache_key(symbol)
-        entry = self._load(key)
-        if entry is not None and self._is_fresh(entry):
-            return CacheResult(entry.rows, CacheStatus.HIT, entry.fetched_at)
-
-        with self._lock_for(key):
-            entry = self._load(key)
+        with get_tracer().start_as_current_span(
+            "cache.historical", attributes={"psxdata.symbol": symbol}
+        ) as span:
+            entry, tier = self._load(key)
             if entry is not None and self._is_fresh(entry):
-                return CacheResult(entry.rows, CacheStatus.HIT, entry.fetched_at)
-            if self._in_cooldown():
-                return self._fallback(entry, PSXRateLimitError(COOLDOWN_MESSAGE))
-            try:
-                rows = fetch(symbol)
-            except PSXRateLimitError as exc:
-                self._start_cooldown()
-                return self._fallback(entry, exc)
-            except PSXUnavailableError as exc:
-                return self._fallback(entry, exc)
+                hit = CacheResult(entry.rows, CacheStatus.HIT, entry.fetched_at)
+                return _traced(span, hit, tier)
 
-            rows = sorted(rows, key=lambda row: row.get("date") or "", reverse=True)
-            fetched_at = self._now()
-            fresh = CacheEntry(symbol, fetched_at, fresh_until(fetched_at, self._market_ttl), rows)
-            self.store.put(key, encode(fresh))
-            return CacheResult(rows, CacheStatus.MISS, fetched_at)
+            with self._lock_for(key):
+                entry, tier = self._load(key)
+                if entry is not None and self._is_fresh(entry):
+                    hit = CacheResult(entry.rows, CacheStatus.HIT, entry.fetched_at)
+                    return _traced(span, hit, tier)
+                if self._in_cooldown():
+                    span.set_attribute("psxdata.cooldown", True)
+                    stale = self._fallback(entry, PSXRateLimitError(COOLDOWN_MESSAGE))
+                    return _traced(span, stale, tier)
+                try:
+                    rows = fetch(symbol)
+                except PSXRateLimitError as exc:
+                    self._start_cooldown()
+                    span.set_attribute("psxdata.cooldown", True)
+                    return _traced(span, self._fallback(entry, exc), tier)
+                except PSXUnavailableError as exc:
+                    return _traced(span, self._fallback(entry, exc), tier)
+
+                rows = sorted(rows, key=lambda row: row.get("date") or "", reverse=True)
+                fetched_at = self._now()
+                fresh = CacheEntry(
+                    symbol, fetched_at, fresh_until(fetched_at, self._market_ttl), rows
+                )
+                self.store.put(key, encode(fresh))
+                return _traced(span, CacheResult(rows, CacheStatus.MISS, fetched_at), "none")
 
     def close(self) -> None:
         self.store.close()
 
-    def _load(self, key: str) -> CacheEntry | None:
-        blob = self.store.get(key)
-        return decode(blob) if blob is not None else None
+    def _load(self, key: str) -> tuple[CacheEntry | None, str]:
+        blob, tier = self.store.get_with_tier(key)
+        entry = decode(blob) if blob is not None else None
+        return entry, tier if entry is not None else "none"
 
     def _is_fresh(self, entry: CacheEntry) -> bool:
         return self._now() < entry.fresh_until
