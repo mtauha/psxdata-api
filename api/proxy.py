@@ -41,11 +41,14 @@ from fastapi import Header, HTTPException, Request
 from limits import RateLimitItemPerMinute
 from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
+from opentelemetry.trace import Span
 from psxdata import BaseScraper, PSXClient
 from psxdata.constants import CACHE_DIR
 from psxdata.proxy import normalize_proxy
 from psxdata.scrapers import token as token_module
 from slowapi.util import get_remote_address
+
+from api.telemetry import get_tracer
 
 PROXY_HEADER = "X-PSX-Proxy"
 ENABLE_ENV = "PSX_PROXY_PASSTHROUGH"
@@ -205,13 +208,23 @@ class PsxSource:
         return self._proxy is not None
 
     def fetch(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        with get_tracer().start_as_current_span(
+            "psx.fetch", attributes={"psxdata.function": name, "psxdata.proxied": self.proxied}
+        ) as span:
+            return self._fetch(span, name, *args, **kwargs)
+
+    def _fetch(self, span: Span, name: str, *args: Any, **kwargs: Any) -> Any:
         if self._passthrough is None or self._request is None or self._proxy is None:
             return getattr(psxdata, name)(*args, **kwargs)
         if kwargs.get("cache", True):
             try:
-                return getattr(self._passthrough.cache_only_client(), name)(*args, **kwargs)
+                result = getattr(self._passthrough.cache_only_client(), name)(*args, **kwargs)
             except CacheMiss:
                 pass
+            else:
+                span.set_attribute("psxdata.cache_only_hit", True)
+                return result
+        span.set_attribute("psxdata.cache_only_hit", False)
         with self._passthrough.acquire(self._request, self._proxy) as client:
             return getattr(client, name)(*args, **kwargs)
 

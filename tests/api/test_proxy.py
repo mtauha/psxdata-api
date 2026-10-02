@@ -374,3 +374,54 @@ class TestFromEnv:
 
     def test_default_off(self):
         assert ProxyPassthrough.from_env({}).enabled is False
+
+
+# ---------------------------------------------------------------------------
+# Telemetry: psx.fetch span and credential hygiene
+# ---------------------------------------------------------------------------
+
+class TestPsxFetchSpan:
+    def test_direct_fetch_span(self, client, otel):
+        with patch("psxdata.tickers", return_value=["HBL"]):
+            assert client.get("/stocks").status_code == 200
+        attrs = dict(otel.span("psx.fetch").attributes)
+        assert attrs == {"psxdata.function": "tickers", "psxdata.proxied": False}
+        assert otel.span("psx.fetch").parent.span_id == otel.server_spans()[0].context.span_id
+
+    def test_proxied_miss_then_cache_only_hit(self, client, enabled, otel):
+        with fake_psx(ScreenerScraper, result=_screener_df()) as reached:
+            assert _proxied(client, "/screener").status_code == 200
+            first = dict(otel.span("psx.fetch").attributes)
+            otel.spans.clear()
+            assert _proxied(client, "/screener").status_code == 200
+            second = dict(otel.span("psx.fetch").attributes)
+        assert len(reached) == 1  # second request was served from the shared cache
+        assert first == {
+            "psxdata.function": "screener", "psxdata.proxied": True,
+            "psxdata.cache_only_hit": False,
+        }
+        assert second == {
+            "psxdata.function": "screener", "psxdata.proxied": True,
+            "psxdata.cache_only_hit": True,
+        }
+
+    def test_fetch_error_is_recorded_and_reraised(self, client, otel):
+        from psxdata.exceptions import PSXUnavailableError
+
+        with patch("psxdata.tickers", side_effect=PSXUnavailableError("down")):
+            assert client.get("/stocks").status_code == 503
+        assert otel.span("psx.fetch").status.status_code.name == "ERROR"
+
+    def test_proxy_credentials_never_emitted(self, make_passthrough, otel):
+        def refuse(host: str, port: int) -> None:
+            raise OSError("refused")
+
+        make_passthrough(connector=refuse)
+        resp = TestClient(app, raise_server_exceptions=False).get(
+            "/screener", headers={PROXY_HEADER: PROXY}
+        )
+        assert resp.status_code == 502
+        assert "s3cret" not in resp.text
+        lines = otel.lines()
+        assert lines, "expected telemetry for the request"
+        assert not [line for line in lines if "s3cret" in line or "alice" in line]
